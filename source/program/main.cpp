@@ -6,6 +6,8 @@
 #include "remote_api.hpp"
 #include "lua-5.1.5/src/lua.hpp"
 #include "dread_types.hpp"
+#include "lua_helper.hpp"
+#include "item_pickups.hpp"
 
 typedef struct
 {
@@ -274,6 +276,11 @@ static const luaL_Reg multiworld_lib[] = {
   {NULL, NULL}
 };
 
+static const luaL_Reg odrpickups_lib[] = {
+    {"SetItemPopupsEnabled", odr::pickups::SetItemPopupsEnabled},
+    {NULL, NULL},
+};
+
 /* Hook asdf */
 
 HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
@@ -296,6 +303,7 @@ HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
 
         lua_pushinteger(L, RemoteApi::BufferSize);
         lua_setfield(L, -2, "BufferSize");
+        luaL_register(L, "OdrPickups", odrpickups_lib);
     }
 };
 
@@ -311,6 +319,15 @@ void getVersionOffsets(functionOffsets *offsets)
         offsets->CFilePathStrIdCtor = 0x166C8;
         offsets->luaRegisterGlobals = 0x010aed50;
         offsets->lua_pcall = 0x010a3a80;
+        offsets->CallFunctionWithArguments = 0x790; // wow that's early
+
+        // Pickups
+        offsets->OnCollectPickup = 0x9d0e28;
+        offsets->PlayPickupSound = 0x9d16c4;
+        offsets->ShowItemPickupMessage = 0xb5fd9c;
+
+        // Audio
+        offsets->PlaySoundWithCallback = 0xfd90d8;
     }
     else /* 1.0.0 - 2.0.0 */
     {
@@ -318,6 +335,15 @@ void getVersionOffsets(functionOffsets *offsets)
         offsets->CFilePathStrIdCtor = 0x16624;
         offsets->luaRegisterGlobals = 0x106ce90;
         offsets->lua_pcall = 0x1061bc0;
+        offsets->CallFunctionWithArguments = 0x790;
+
+        // Pickups
+        offsets->OnCollectPickup = 0x9ce5c8;
+        offsets->PlayPickupSound = 0x9cee64;
+        offsets->ShowItemPickupMessage = 0xb5395c;
+
+        // Audio
+        offsets->PlaySoundWithCallback = 0xf975f8;
     }
 }
 
@@ -334,6 +360,8 @@ extern "C" void exl_main(void* x0, void* x1)
     ForceRomfs::InstallAtOffset(offsets.CFilePathStrIdCtor);
     RomMounted::InstallAtFuncPtr(nn::fs::MountRom);
     LuaRegisterGlobals::InstallAtOffset(offsets.luaRegisterGlobals);
+    odr::lua::InstallHooks(&offsets);
+    odr::pickups::InstallHooks(&offsets);
 
     /* Alternative install funcs: */
     /* InstallAtPtr takes an absolute address as a uintptr_t. */

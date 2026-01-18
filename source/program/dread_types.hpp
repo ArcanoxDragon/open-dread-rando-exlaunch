@@ -7,6 +7,15 @@ typedef struct {
     ptrdiff_t CFilePathStrIdCtor;
     ptrdiff_t luaRegisterGlobals;
     ptrdiff_t lua_pcall;
+	ptrdiff_t CallFunctionWithArguments;
+
+	// Pickups
+    ptrdiff_t OnCollectPickup;
+	ptrdiff_t PlayPickupSound;
+    ptrdiff_t ShowItemPickupMessage;
+
+	// Audio
+	ptrdiff_t PlaySoundWithCallback;
 } functionOffsets;
 
 typedef unsigned long long crc64_t;
