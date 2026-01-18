@@ -276,11 +276,6 @@ static const luaL_Reg multiworld_lib[] = {
   {NULL, NULL}
 };
 
-static const luaL_Reg odrpickups_lib[] = {
-    {"SetItemPopupsEnabled", odr::pickups::SetItemPopupsEnabled},
-    {NULL, NULL},
-};
-
 /* Hook asdf */
 
 HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
@@ -303,7 +298,8 @@ HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
 
         lua_pushinteger(L, RemoteApi::BufferSize);
         lua_setfield(L, -2, "BufferSize");
-        luaL_register(L, "OdrPickups", odrpickups_lib);
+
+        odr::pickups::InstallLuaLibrary(L);
     }
 };
 
