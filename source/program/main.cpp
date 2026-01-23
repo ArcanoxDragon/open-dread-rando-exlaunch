@@ -8,6 +8,7 @@
 #include "dread_types.hpp"
 #include "lua_helper.hpp"
 #include "item_pickups.hpp"
+#include "debug_hooks.hpp"
 
 typedef struct
 {
@@ -299,6 +300,7 @@ HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
         lua_pushinteger(L, RemoteApi::BufferSize);
         lua_setfield(L, -2, "BufferSize");
 
+        odr::debug::InstallLuaLibrary(L);
         odr::pickups::InstallLuaLibrary(L);
     }
 };
@@ -315,6 +317,7 @@ void getVersionOffsets(functionOffsets *offsets)
         offsets->CFilePathStrIdCtor = 0x166C8;
         offsets->luaRegisterGlobals = 0x010aed50;
         offsets->lua_pcall = 0x010a3a80;
+        offsets->LogWarn = 0x1094820;
         offsets->CallFunctionWithArguments = 0x790; // wow that's early
 
         // Pickups
@@ -331,6 +334,7 @@ void getVersionOffsets(functionOffsets *offsets)
         offsets->CFilePathStrIdCtor = 0x16624;
         offsets->luaRegisterGlobals = 0x106ce90;
         offsets->lua_pcall = 0x1061bc0;
+        offsets->LogWarn = 0x1052a70;
         offsets->CallFunctionWithArguments = 0x790;
 
         // Pickups
@@ -357,6 +361,7 @@ extern "C" void exl_main(void* x0, void* x1)
     RomMounted::InstallAtFuncPtr(nn::fs::MountRom);
     LuaRegisterGlobals::InstallAtOffset(offsets.luaRegisterGlobals);
     odr::lua::InstallFunctions(&offsets);
+    odr::debug::InstallHooks(&offsets);
     odr::pickups::InstallHooks(&offsets);
 
     /* Alternative install funcs: */
