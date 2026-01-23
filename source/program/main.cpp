@@ -5,6 +5,9 @@
 #include "cJSON.h"
 #include "remote_api.hpp"
 #include "lua-5.1.5/src/lua.hpp"
+#include "dread_types.hpp"
+#include "lua_helper.hpp"
+#include "item_pickups.hpp"
 
 typedef struct
 {
@@ -102,7 +105,7 @@ void populateStringReplacementList()
             replacementFileStr = strcat(replacementFileStr, fileStr);
             g_stringList[i].crc = crc64(fileStr, strlen(fileStr));
             g_stringList[i].replacement = replacementFileStr;
-        } 
+        }
         else if(cJSON_IsObject(itemObject))
         {
             char const *str = cJSON_GetItemName(itemObject);
@@ -151,7 +154,7 @@ int multiworld_update(lua_State* outerLuaState) {
     RemoteApi::ProcessCommand(outerLuaState, [](lua_State* L, RemoteApi::CommandBuffer& RecvBuffer, size_t RecvBufferLength) -> PacketBuffer {
         size_t resultSize = 0;          // length of the lua string response (without \0)
         bool outputSuccess = false;     // was the lua function call sucessfully
-        PacketBuffer sendBuffer(new std::vector<u8>());               // sendBuffer to store the result. this pointer is returned 
+        PacketBuffer sendBuffer(new std::vector<u8>());               // sendBuffer to store the result. this pointer is returned
 
         // +1; use lua's tostring so we properly convert all types
         lua_getglobal(L, "tostring");
@@ -166,11 +169,11 @@ int multiworld_update(lua_State* outerLuaState) {
             lua_call(L, 1, 1);
 
             const char* luaResult = lua_tolstring(L, 1, &resultSize);
-            
+
             if (pcallResult == 0) {
                 // success! top string is the entire result
                 outputSuccess = true;
-            } 
+            }
             sendBuffer->insert(sendBuffer->begin(), luaResult, luaResult + resultSize);
         } else {
             std::string errorMessage = "error parsing buffer: " + std::to_string(loadResult);
@@ -193,8 +196,8 @@ int multiworld_update(lua_State* outerLuaState) {
 
 PacketBuffer create_packet_from_lua_string(lua_State* L) {
     size_t resultSize = 0;          // length of the lua string response (without \0)
-    PacketBuffer sendBuffer(new std::vector<u8>());  // sendBuffer to store the result. this pointer is returned 
-    
+    PacketBuffer sendBuffer(new std::vector<u8>());  // sendBuffer to store the result. this pointer is returned
+
     const char* luaResult = lua_tolstring(L, 1, &resultSize);
 
     uint32_t resultAs32Bit = resultSize;
@@ -208,7 +211,7 @@ PacketBuffer create_packet_from_lua_string(lua_State* L) {
 
 void build_and_send_message(lua_State* L, PacketType outerType) {
     RemoteApi::SendMessage(L, outerType, [](lua_State* L, PacketType packetType) -> PacketBuffer {
-        PacketBuffer sendBuffer = create_packet_from_lua_string(L); 
+        PacketBuffer sendBuffer = create_packet_from_lua_string(L);
         sendBuffer->insert(sendBuffer->begin(), (u8)packetType);
         return sendBuffer;
     });
@@ -270,7 +273,7 @@ static const luaL_Reg multiworld_lib[] = {
   {"SendReceivedPickups", recv_pickups_send},
   {"SendNewGameState", new_game_state_send},
   {"Connected", is_connected},
-  {NULL, NULL}  
+  {NULL, NULL}
 };
 
 /* Hook asdf */
@@ -278,7 +281,7 @@ static const luaL_Reg multiworld_lib[] = {
 HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
     static void Callback(lua_State* L) {
         Orig(L);
-        
+
         nn::oe::DisplayVersion dispVer;
         nn::oe::GetDisplayVersion(&dispVer);
         lua_pushstring(L, dispVer.displayVersion);
@@ -295,17 +298,10 @@ HOOK_DEFINE_TRAMPOLINE(LuaRegisterGlobals) {
 
         lua_pushinteger(L, RemoteApi::BufferSize);
         lua_setfield(L, -2, "BufferSize");
+
+        odr::pickups::InstallLuaLibrary(L);
     }
 };
-
-typedef struct
-{
-    ptrdiff_t crc64;
-    ptrdiff_t CFilePathStrIdCtor;
-    ptrdiff_t luaRegisterGlobals;
-    ptrdiff_t lua_pcall;
-
-} functionOffsets;
 
 /* Handle version differences */
 void getVersionOffsets(functionOffsets *offsets)
@@ -319,13 +315,31 @@ void getVersionOffsets(functionOffsets *offsets)
         offsets->CFilePathStrIdCtor = 0x166C8;
         offsets->luaRegisterGlobals = 0x010aed50;
         offsets->lua_pcall = 0x010a3a80;
-    } 
+        offsets->CallFunctionWithArguments = 0x790; // wow that's early
+
+        // Pickups
+        offsets->OnCollectPickup = 0x9d0e28;
+        offsets->PlayPickupSound = 0x9d16c4;
+        offsets->ShowItemPickupMessage = 0xb5fd9c;
+
+        // Audio
+        offsets->PlaySoundWithCallback = 0xfd90d8;
+    }
     else /* 1.0.0 - 2.0.0 */
     {
         offsets->crc64 = 0x1570;
         offsets->CFilePathStrIdCtor = 0x16624;
         offsets->luaRegisterGlobals = 0x106ce90;
         offsets->lua_pcall = 0x1061bc0;
+        offsets->CallFunctionWithArguments = 0x790;
+
+        // Pickups
+        offsets->OnCollectPickup = 0x9ce5c8;
+        offsets->PlayPickupSound = 0x9cee64;
+        offsets->ShowItemPickupMessage = 0xb5395c;
+
+        // Audio
+        offsets->PlaySoundWithCallback = 0xf975f8;
     }
 }
 
@@ -342,6 +356,8 @@ extern "C" void exl_main(void* x0, void* x1)
     ForceRomfs::InstallAtOffset(offsets.CFilePathStrIdCtor);
     RomMounted::InstallAtFuncPtr(nn::fs::MountRom);
     LuaRegisterGlobals::InstallAtOffset(offsets.luaRegisterGlobals);
+    odr::lua::InstallFunctions(&offsets);
+    odr::pickups::InstallHooks(&offsets);
 
     /* Alternative install funcs: */
     /* InstallAtPtr takes an absolute address as a uintptr_t. */
